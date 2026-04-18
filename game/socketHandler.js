@@ -173,7 +173,7 @@ module.exports = function setupSocketHandler(io) {
     });
 
     // ─── SET WORD ───────────────────────────────────────
-    socket.on('set-word', ({ word }) => {
+    socket.on('set-word', async ({ word }) => {
       try {
         const room = roomManager.getRoomBySocketId(socket.id);
         if (!room) {
@@ -186,7 +186,8 @@ module.exports = function setupSocketHandler(io) {
 
         const cleanWord = word.trim().toLowerCase();
 
-        if (!isAllowedSecret(cleanWord, room.wordLength, room.theme)) {
+        const allowed = await isAllowedSecret(cleanWord, room.wordLength, room.theme);
+        if (!allowed) {
           return socket.emit('error', {
             message: room.theme !== 'none' 
               ? `Word must be related to theme: ${room.theme} and use exactly ${room.wordLength} letters (A-Z only)` 

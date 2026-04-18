@@ -1,22 +1,26 @@
+const { isWordRelatedToTheme } = require('./dynamicValidator');
+
 const MIN_WORD_LENGTH = Math.max(2, parseInt(process.env.WORD_LENGTH_MIN, 10) || 3)
 const MAX_WORD_LENGTH = Math.min(32, parseInt(process.env.WORD_LENGTH_MAX, 10) || 20)
 
 /**
- * Any letters-only word is allowed (no dictionary check).
+ * Localized and expanded themes to supplement the dynamic API.
+ * Includes "Nigeria First" localization.
  */
-const themes = {
-  animals: new Set(['cat', 'dog', 'cow', 'pig', 'fox', 'bear', 'lion', 'wolf', 'deer', 'tiger', 'shark', 'eagle', 'zebra', 'horse', 'mouse', 'donkey', 'monkey', 'rabbit', 'elephant', 'kangaroo']),
-  sports: new Set(['run', 'ski', 'golf', 'surf', 'rugby', 'track', 'skate', 'soccer', 'tennis', 'hockey', 'football', 'baseball', 'basketball', 'volleyball', 'badminton']),
-  foods: new Set(['pie', 'egg', 'cake', 'soup', 'meat', 'fish', 'rice', 'taco', 'bread', 'pizza', 'pasta', 'apple', 'grape', 'lemon', 'melon', 'orange', 'banana', 'cheese', 'burger', 'cookie']),
-  colors: new Set(['red', 'blue', 'pink', 'gray', 'cyan', 'gold', 'teal', 'navy', 'green', 'black', 'white', 'brown', 'peach', 'amber', 'purple', 'yellow', 'orange', 'silver', 'indigo', 'violet']),
-  countries: new Set(['usa', 'uk', 'fiji', 'peru', 'cuba', 'mali', 'togo', 'chad', 'oman', 'iran', 'iraq', 'spain', 'italy', 'japan', 'china', 'india', 'egypt', 'brazil', 'france', 'mexico']),
-  brands: new Set(['ibm', 'bmw', 'kia', 'mac', 'ford', 'sony', 'nike', 'puma', 'asus', 'dell', 'acer', 'audi', 'intel', 'apple', 'honda', 'gucci', 'prada', 'rolex', 'tesla', 'amazon']),
-  cities: new Set(['rome', 'oslo', 'kiev', 'lima', 'baku', 'doha', 'bern', 'seoul', 'tokyo', 'paris', 'dubai', 'milan', 'miami', 'lagos', 'delhi', 'london', 'moscow', 'madrid', 'berlin', 'athens']),
-  tech: new Set(['ram', 'cpu', 'gpu', 'ssd', 'usb', 'app', 'web', 'bot', 'code', 'data', 'byte', 'file', 'disk', 'chip', 'cloud', 'mouse', 'board', 'screen', 'server', 'router']),
-  music: new Set(['rap', 'pop', 'jazz', 'rock', 'bass', 'beat', 'clef', 'solo', 'song', 'tune', 'band', 'choir', 'chord', 'tempo', 'vocal', 'piano', 'flute', 'guitar', 'melody', 'rhythm']),
-  science: new Set(['dna', 'gas', 'ion', 'lab', 'cell', 'data', 'atom', 'mass', 'gene', 'star', 'acid', 'base', 'heat', 'light', 'space', 'force', 'fluid', 'solid', 'planet', 'energy']),
-  movies: new Set(['saw', 'jaws', 'it', 'up', 'dune', 'hook', 'tron', 'shrek', 'rocky', 'alien', 'matrix', 'avenger', 'batman', 'marvel', 'disney', 'cinema', 'action', 'comedy', 'drama', 'horror']),
-  nature: new Set(['sky', 'sun', 'sea', 'ice', 'fog', 'dew', 'tree', 'leaf', 'wood', 'rock', 'dirt', 'dust', 'sand', 'wind', 'rain', 'fire', 'snow', 'storm', 'river', 'forest'])
+const localThemes = {
+  animals: new Set(['cat', 'dog', 'cow', 'pig', 'fox', 'bear', 'lion', 'wolf', 'deer', 'tiger', 'shark', 'eagle', 'zebra', 'horse', 'mouse', 'donkey', 'monkey', 'rabbit', 'elephant', 'kangaroo', 'gorilla', 'giraffe', 'leopard', 'cheetah', 'hyena', 'vulture', 'penguin', 'dolphin', 'whale', 'octopus', 'camel', 'hamster', 'parrot', 'falcon', 'cobra', 'lizard', 'turtle', 'snail', 'spider', 'beetle']),
+  sports: new Set(['run', 'ski', 'golf', 'surf', 'rugby', 'track', 'skate', 'soccer', 'tennis', 'hockey', 'football', 'baseball', 'basketball', 'volleyball', 'badminton', 'boxing', 'karate', 'judo', 'wrestling', 'cycling', 'swimming', 'archery', 'fencing', 'cricket', 'squash', 'rowing', 'sailing', 'hiking', 'racing', 'chess', 'darts']),
+  foods: new Set(['pie', 'egg', 'cake', 'soup', 'meat', 'fish', 'rice', 'taco', 'bread', 'pizza', 'pasta', 'apple', 'grape', 'lemon', 'melon', 'orange', 'banana', 'cheese', 'burger', 'cookie', 'shrimp', 'prawn', 'lobster', 'oyster', 'salmon', 'steak', 'salad', 'bacon', 'donut', 'muffin', 'jollof', 'suya', 'amala', 'egusi', 'akara', 'fufu', 'eba', 'garri', 'tuwo', 'akpu', 'zobo', 'dodo', 'kilishi', 'banga', 'yam', 'okra', 'stew', 'pepper', 'onion', 'garlic', 'ginger']),
+  colors: new Set(['red', 'blue', 'pink', 'gray', 'cyan', 'gold', 'teal', 'navy', 'green', 'black', 'white', 'brown', 'peach', 'amber', 'purple', 'yellow', 'orange', 'silver', 'indigo', 'violet', 'azure', 'beige', 'bronze', 'coral', 'ivory', 'khaki', 'lavender', 'lime', 'magenta', 'maroon', 'olive', 'plum', 'ruby', 'scarlet', 'tan', 'turquoise']),
+  countries: new Set(['usa', 'uk', 'fiji', 'peru', 'cuba', 'mali', 'togo', 'chad', 'oman', 'iran', 'iraq', 'spain', 'italy', 'japan', 'china', 'india', 'egypt', 'brazil', 'france', 'mexico', 'nigeria', 'ghana', 'kenya', 'canada', 'germany', 'russia', 'turkey', 'greece', 'norway', 'sweden', 'korea', 'argentina', 'chile', 'peru', 'morocco', 'senegal', 'ethiopia', 'south africa']),
+  brands: new Set(['ibm', 'bmw', 'kia', 'mac', 'ford', 'sony', 'nike', 'puma', 'asus', 'dell', 'acer', 'audi', 'intel', 'apple', 'honda', 'gucci', 'prada', 'rolex', 'tesla', 'amazon', 'google', 'meta', 'tiktok', 'adidas', 'dangote', 'glo', 'mtn', 'airtel', 'access', 'zenith', 'peak', 'milo', 'maggi', 'knorr', 'cowbell', 'chivita', 'indomie']),
+  cities: new Set(['rome', 'oslo', 'kiev', 'lima', 'baku', 'doha', 'bern', 'seoul', 'tokyo', 'paris', 'dubai', 'milan', 'miami', 'lagos', 'delhi', 'london', 'moscow', 'madrid', 'berlin', 'athens', 'abuja', 'kano', 'ibadan', 'benin', 'enugu', 'jos', 'warri', 'aba', 'akure', 'ikeja', 'asaba', 'awka', 'calabar', 'sokoto', 'ilorin', 'kaduna', 'lokoja', 'minna', 'owerri', 'uyo', 'yola', 'zaria']),
+  tech: new Set(['ram', 'cpu', 'gpu', 'ssd', 'usb', 'app', 'web', 'bot', 'code', 'data', 'byte', 'file', 'disk', 'chip', 'cloud', 'mouse', 'board', 'screen', 'server', 'router', 'phone', 'laptop', 'tablet', 'linux', 'windows', 'python', 'java', 'react', 'node', 'crypto', 'signal', 'zoom', 'slack', 'wifi', 'fiber', 'cable', 'modem', 'logic', 'array', 'stack', 'queue']),
+  music: new Set(['rap', 'pop', 'jazz', 'rock', 'bass', 'beat', 'clef', 'solo', 'song', 'tune', 'band', 'choir', 'chord', 'tempo', 'vocal', 'piano', 'flute', 'guitar', 'melody', 'rhythm', 'drums', 'violin', 'trumpet', 'afrobeats', 'highlife', 'gospel', 'blues', 'metal', 'techno', 'house', 'reggae', 'samba', 'opera', 'ballet', 'dance', 'lyrics', 'album', 'remix', 'disco']),
+  science: new Set(['dna', 'gas', 'ion', 'lab', 'cell', 'data', 'atom', 'mass', 'gene', 'star', 'acid', 'base', 'heat', 'light', 'space', 'force', 'fluid', 'solid', 'planet', 'energy', 'math', 'atom', 'physics', 'biology', 'formula', 'logic', 'theory', 'study', 'expert', 'doctor', 'nurse', 'health', 'nature', 'power', 'source', 'system', 'method', 'effect', 'result']),
+  movies: new Set(['saw', 'jaws', 'it', 'up', 'dune', 'hook', 'tron', 'shrek', 'rocky', 'alien', 'matrix', 'avenger', 'batman', 'marvel', 'disney', 'cinema', 'action', 'comedy', 'drama', 'horror', 'actor', 'script', 'scene', 'camera', 'studio', 'hollywood', 'nollywood', 'oscar', 'award', 'film', 'series', 'show', 'video', 'watch', 'media', 'press']),
+  nature: new Set(['sky', 'sun', 'sea', 'ice', 'fog', 'dew', 'tree', 'leaf', 'wood', 'rock', 'dirt', 'dust', 'sand', 'wind', 'rain', 'fire', 'snow', 'storm', 'river', 'forest', 'ocean', 'lake', 'earth', 'ground', 'grass', 'flower', 'plant', 'desert', 'jungle', 'island', 'valley', 'cave', 'cliff', 'beach', 'creek', 'garden', 'field', 'meadow', 'peak', 'hill', 'animal']),
+  naija: new Set(['lagos', 'abuja', 'kano', 'ibadan', 'benin', 'enugu', 'jos', 'delta', 'aba', 'warri', 'ikeja', 'naira', 'naija', 'suya', 'jollof', 'amala', 'egusi', 'akara', 'fufu', 'eba', 'garri', 'tuwo', 'akpu', 'zobo', 'dodo', 'kilishi', 'banga', 'nkwobi', 'yam', 'okra', 'glo', 'mtn', 'dangote', 'airtel', 'access', 'zenith', 'peak', 'milo', 'maggi', 'knorr', 'cowbell', 'indomie', 'japa', 'sapa', 'chop', 'kolo', 'cruise', 'sharp', 'gba', 'yab', 'okada', 'owambe', 'afrobeats', 'nollywood', 'highlife', 'gospel', 'area', 'pikin', 'mumu', 'agbero', 'dash', 'legit', 'runs', 'bambi', 'shayo', 'vawulence', 'steeze'])
 }
 
 function isAllowedWord(word, length) {
@@ -24,12 +28,25 @@ function isAllowedWord(word, length) {
   return /^[a-z]+$/.test(word)
 }
 
-function isAllowedSecret(word, length, theme = 'none') {
+/**
+ * Validates a word against a theme.
+ * Checks both local Nigerian/cultural sets and the dynamic Datamuse API.
+ */
+async function isAllowedSecret(word, length, theme = 'none') {
   if (!isAllowedWord(word, length)) return false
-  if (theme !== 'none' && themes[theme]) {
-    return themes[theme].has(word)
+  if (theme === 'none') return true
+
+  const cleanWord = word.toLowerCase()
+
+  // 1. Check local localized sets first (fast)
+  if (localThemes[theme] && localThemes[theme].has(cleanWord)) {
+    return true
   }
-  return true
+
+  // 2. Check dynamic API relation (global knowledge)
+  // We use this as a supplemental check for global terms (like "shrimp")
+  const isRelated = await isWordRelatedToTheme(cleanWord, theme)
+  return isRelated
 }
 
 function isValidRoomWordLength(n) {
@@ -43,3 +60,4 @@ module.exports = {
   MIN_WORD_LENGTH,
   MAX_WORD_LENGTH,
 }
+
