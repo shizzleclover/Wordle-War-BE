@@ -1,4 +1,5 @@
 const roomManager = require('./RoomManager');
+const { getOrUpdateDailyWord } = require('../utils/dailyWord');
 
 class Matchmaker {
   constructor() {
@@ -31,7 +32,7 @@ class Matchmaker {
       socketId,
       user,
       options,
-      elo: Number(elo) || 1200,
+      elo: Number(elo) || 100,
       joinedAt: Date.now()
     });
     
@@ -40,6 +41,11 @@ class Matchmaker {
 
   leaveQueue(userId) {
     this.queue.delete(String(userId));
+  }
+
+  isDailyQueue(userId) {
+    const q = this.queue.get(String(userId));
+    return q?.options?.isDaily === true;
   }
 
   isInQueue(userId) {
@@ -62,6 +68,7 @@ class Matchmaker {
 
         // Strict matches
         if (p1.options.gameMode !== p2.options.gameMode) continue;
+        if (!!p1.options.isDaily !== !!p2.options.isDaily) continue;
         
         // If not random mode, word length and theme must match
         if (p1.options.gameMode !== 'random') {
@@ -103,26 +110,22 @@ class Matchmaker {
 
       const room = roomManager.createRoom(wordLength, p1.socketId, p1.user, {
         gameMode: p1.options.gameMode,
-        theme: theme
+        theme: theme,
+        isDaily: !!p1.options.isDaily
       });
       roomManager.joinRoom(room.id, p2.socketId, p2.user);
 
-      // Add sockets to the room
-      const s1 = this.io.sockets.sockets.get(p1.socketId);
-      const s2 = this.io.sockets.sockets.get(p2.socketId);
-      
-      if (s1) s1.join(room.id);
-      if (s2) s2.join(room.id);
-
-      // Emit straight to room
-      const state1 = this.buildRoomState(room, p1.socketId);
-      const state2 = this.buildRoomState(room, p2.socketId);
-
-      if (s1 && state1) s1.emit('room-state', state1);
-      if (s2 && state2) s2.emit('room-state', state2);
-
-      // Let both know they matched
-      this.io.to(room.id).emit('match-found', { roomCode: room.id });
+      // FOR DAILY RACE: Skip setup and set words immediately
+      if (p1.options.isDaily) {
+        getOrUpdateDailyWord().then(daily => {
+          room.setWord(p1.socketId, daily.word);
+          room.setWord(p2.socketId, daily.word);
+          // Emit game-start manually since setWord might not trigger it instantly in all scenarios
+          this.io.to(room.id).emit('match-found', { roomCode: room.id, isDaily: true });
+        });
+      } else {
+        this.io.to(room.id).emit('match-found', { roomCode: room.id });
+      }
       
       console.log(`🤝 Match formed: ${p1.user.username} vs ${p2.user.username} in Room ${room.id} (${p1.options.gameMode})`);
     } catch (err) {

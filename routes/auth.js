@@ -1,11 +1,30 @@
 const express = require('express');
 const User = require('../models/User');
 const { generateToken, authMiddleware } = require('../middleware/auth');
+const rateLimit = require('express-rate-limit');
 
 const router = express.Router();
 
+/** Escape regex special chars to prevent ReDoS */
+function escapeRegex(str) {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+// Rate limiters
+const registerLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 10, // Limit each IP to 10 register requests per window
+  message: { message: 'Too many accounts created from this IP, please try again after 15 minutes' }
+});
+
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 15, // Limit each IP to 15 login requests per window
+  message: { message: 'Too many login attempts from this IP, please try again after 15 minutes' }
+});
+
 // POST /api/auth/register
-router.post('/register', async (req, res) => {
+router.post('/register', registerLimiter, async (req, res) => {
   try {
     const { username, password } = req.body;
 
@@ -23,7 +42,7 @@ router.post('/register', async (req, res) => {
 
     // Check if username exists (case-insensitive)
     const existingUser = await User.findOne({ 
-      username: new RegExp('^' + username.trim() + '$', 'i') 
+      username: new RegExp('^' + escapeRegex(username.trim()) + '$', 'i') 
     });
     if (existingUser) {
       return res.status(409).json({ message: 'Username already taken' });
@@ -48,7 +67,7 @@ router.post('/register', async (req, res) => {
 });
 
 // POST /api/auth/login
-router.post('/login', async (req, res) => {
+router.post('/login', loginLimiter, async (req, res) => {
   try {
     const { username, password } = req.body;
 
@@ -58,7 +77,7 @@ router.post('/login', async (req, res) => {
 
     // Find user (case-insensitive)
     const user = await User.findOne({ 
-      username: new RegExp('^' + username.trim() + '$', 'i') 
+      username: new RegExp('^' + escapeRegex(username.trim()) + '$', 'i') 
     });
     if (!user) {
       return res.status(401).json({ message: 'Invalid username or password' });

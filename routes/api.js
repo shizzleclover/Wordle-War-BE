@@ -185,8 +185,29 @@ router.get('/leaderboard', authMiddleware, async (req, res) => {
 router.get('/users/:username/profile', async (req, res) => {
   try {
     const { username } = req.params;
-    const user = await User.findOne({ username }).select('-password');
+    const user = await User.findOne({ username }).select('-password').populate('following', 'username stats.elo');
     if (!user) return res.status(404).json({ message: 'User not found' });
+
+    // Check if viewing user follows this user
+    let isFollowing = false;
+    const authHeader = req.headers.authorization;
+    if (authHeader) {
+      // Very basic check if we have a token, we don't necessarily need the full protect middleware here
+      // but let's try to get the current user if possible to see if they follow this profile
+      const jwt = require('jsonwebtoken');
+      try {
+        const token = authHeader.split(' ')[1];
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        const me = await User.findById(decoded.id);
+        if (me) {
+          isFollowing = me.following.some(f => f.toString() === user._id.toString());
+        }
+      } catch (e) {
+        // ignore auth errors for public profile
+      }
+    }
+
+    const followersCount = await User.countDocuments({ following: user._id });
 
     const matches = await Match.find({ 'players.username': username, 'result.endReason': { $ne: 'abandoned' } })
       .sort({ createdAt: -1 })
@@ -216,6 +237,10 @@ router.get('/users/:username/profile', async (req, res) => {
     res.json({
       username: user.username,
       joinedAt: user.createdAt,
+      isFollowing,
+      followersCount,
+      followingCount: user.following.length,
+      following: user.following.map(f => ({ username: f.username, elo: f.stats.elo })),
       stats: {
         elo: stats.elo,
         gamesPlayed: stats.gamesPlayed,

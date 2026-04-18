@@ -96,6 +96,30 @@ module.exports = function setupSocketHandler(io) {
 
     void handleReconnect(socket, io);
 
+    socket.on('use-powerup', ({ type }) => {
+      try {
+        const room = roomManager.getRoomBySocketId(socket.id);
+        if (!room) return;
+        const result = room.usePowerup(socket.id, type);
+        io.to(room.id).emit('powerup-used', {
+          by: socket.user.username,
+          type,
+          payload: result.payload
+        });
+      } catch (err) {
+        socket.emit('error', err.message);
+      }
+    });
+
+    socket.on('game:reaction', ({ emoji }) => {
+      const room = roomManager.getRoomBySocketId(socket.id);
+      if (!room) return;
+      const opponent = room.getOpponent(socket.id);
+      if (opponent && !opponent.disconnected) {
+        io.to(opponent.socketId).emit('game:reaction', { emoji });
+      }
+    });
+
     socket.on('request-room-state', () => {
       try {
         const room = roomManager.getRoomBySocketId(socket.id);

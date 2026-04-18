@@ -24,8 +24,11 @@ const userSchema = new mongoose.Schema({
     fastestWin:   { type: Number, default: null },
     winStreak:    { type: Number, default: 0 },
     bestStreak:   { type: Number, default: 0 },
-    elo:          { type: Number, default: 100 }
+    elo:          { type: Number, default: 100 },
+    dailyStreak:  { type: Number, default: 0 },
+    lastDailyDate: { type: String, default: null } // YYYY-MM-DD
   },
+  following: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
   createdAt: { type: Date, default: Date.now }
 });
 
@@ -48,5 +51,8 @@ userSchema.methods.toPublicJSON = function () {
   delete obj.password;
   return obj;
 };
+
+// Case-insensitive unique index to prevent race-condition duplicate usernames
+userSchema.index({ username: 1 }, { unique: true, collation: { locale: 'en', strength: 2 } });
 
 module.exports = mongoose.model('User', userSchema);

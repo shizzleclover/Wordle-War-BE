@@ -49,7 +49,7 @@ const matchSchema = new mongoose.Schema({
     },
     endReason: {
       type: String,
-      enum: ['solved', 'disconnect', 'blitz-timeout'],
+      enum: ['solved', 'disconnect', 'blitz-timeout', 'forfeit', 'abandoned'],
       default: 'solved'
     }
   },

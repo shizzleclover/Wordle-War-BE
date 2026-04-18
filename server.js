@@ -8,6 +8,8 @@ const { socketAuthMiddleware } = require('./middleware/auth');
 const setupSocketHandler = require('./game/socketHandler');
 const authRoutes = require('./routes/auth');
 const apiRoutes = require('./routes/api');
+const socialRoutes = require('./routes/social');
+const dailyRoutes = require('./routes/daily');
 
 const app = express();
 const server = http.createServer(app);
