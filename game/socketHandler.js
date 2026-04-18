@@ -347,11 +347,30 @@ module.exports = function setupSocketHandler(io) {
         const room = roomManager.getRoomBySocketId(socket.id);
         if (!room) return;
         
-        const suggestion = await getRecommendedWord(room.theme, room.wordLength);
+        // Collect words to exclude: opponent's secret word + any previously suggested words in this room
+        const excludeSet = new Set();
+        for (const [, p] of room.players) {
+          if (p.secretWord) excludeSet.add(p.secretWord.toLowerCase());
+          if (p.lastSuggestion) excludeSet.add(p.lastSuggestion.toLowerCase());
+        }
+
+        // Try up to 5 times to get a unique suggestion
+        let suggestion = null;
+        for (let attempt = 0; attempt < 5; attempt++) {
+          const candidate = await getRecommendedWord(room.theme, room.wordLength);
+          if (candidate && !excludeSet.has(candidate.toLowerCase())) {
+            suggestion = candidate;
+            break;
+          }
+        }
+
         if (suggestion) {
+          // Track what we suggested so the other player won't get the same word
+          const player = room.getPlayer(socket.id);
+          if (player) player.lastSuggestion = suggestion.toLowerCase();
           socket.emit('word-suggestion', { word: suggestion });
         } else {
-          socket.emit('error', { message: 'Could not find a suggestion for this theme/length' });
+          socket.emit('error', { message: 'Could not find a unique suggestion. Try typing your own!' });
         }
       } catch (err) {
         console.error('Word suggestion error:', err);
