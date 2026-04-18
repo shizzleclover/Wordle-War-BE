@@ -53,10 +53,52 @@ function isValidRoomWordLength(n) {
   return Number.isInteger(n) && n >= MIN_WORD_LENGTH && n <= MAX_WORD_LENGTH
 }
 
+/**
+ * Gets a recommended word for a given theme and length.
+ * For 'naija', picks from local set.
+ * For others, combines local set with a Datamuse 'means like' query.
+ */
+async function getRecommendedWord(theme, length) {
+  // 1. Try local set first
+  if (localThemes[theme]) {
+    const list = [...localThemes[theme]].filter(w => w.length === length);
+    if (list.length > 0) {
+      return list[Math.floor(Math.random() * list.length)];
+    }
+  }
+
+  if (theme === 'none') {
+    // If no theme, we can just pick a common 5-letter word if length is 5 etc.
+    const generic = ['apple', 'bread', 'clock', 'dance', 'eagle', 'flute', 'grape', 'house', 'ivory', 'joker'];
+    const filtered = generic.filter(w => w.length === length);
+    return filtered.length > 0 ? filtered[Math.floor(Math.random() * filtered.length)] : null;
+  }
+
+  // 2. Fetch from Datamuse
+  try {
+    const sp = '?'.repeat(length);
+    const url = `https://api.datamuse.com/words?ml=${encodeURIComponent(theme)}&sp=${sp}&max=30`;
+    const response = await fetch(url);
+    if (response.ok) {
+      const data = await response.json();
+      if (data && data.length > 0) {
+        // Return a random one from the results to keep it interesting
+        const pick = data[Math.floor(Math.random() * data.length)];
+        return pick.word.toLowerCase();
+      }
+    }
+  } catch (err) {
+    console.error('[WordValidator] Suggestion fetch failed:', err);
+  }
+
+  return null;
+}
+
 module.exports = {
   isAllowedWord,
   isAllowedSecret,
   isValidRoomWordLength,
+  getRecommendedWord,
   MIN_WORD_LENGTH,
   MAX_WORD_LENGTH,
 }

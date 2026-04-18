@@ -34,16 +34,22 @@ module.exports = function setupSocketHandler(io) {
         ? Math.round((Date.now() - room.startedAt.getTime()) / 1000)
         : 0;
 
-      io.to(winnerSocketId).emit('game-over', {
-        result: 'win',
+      const payload = {
         winner: winnerP.username,
         opponentWord: loserP.secretWord?.toUpperCase(),
         yourWord: winnerP.secretWord?.toUpperCase(),
         yourGuesses: winnerP.guesses.length,
         opponentGuesses: loserP.guesses.length,
         duration,
-        endReason: 'disconnect'
-      });
+        endReason: 'forfeit'
+      };
+
+      io.to(winnerSocketId).emit('game-over', { ...payload, result: 'win' });
+      
+      // If the loser is still around (e.g. they clicked 'forfeit' button), tell them too
+      if (loserP && !loserP.disconnected) {
+        io.to(loserSocketId).emit('game-over', { ...payload, result: 'loss' });
+      }
     },
 
     onSetupAbandon: async ({ room, remainingSocketId, abandonedByUsername }) => {
@@ -305,6 +311,23 @@ module.exports = function setupSocketHandler(io) {
         }
       } catch (error) {
         socket.emit('error', { message: error.message });
+      }
+    });
+
+    socket.on('get-word-suggestion', async () => {
+      try {
+        const room = roomManager.getRoomBySocketId(socket.id);
+        if (!room) return;
+        
+        const suggestion = await getRecommendedWord(room.theme, room.wordLength);
+        if (suggestion) {
+          socket.emit('word-suggestion', { word: suggestion });
+        } else {
+          socket.emit('error', { message: 'Could not find a suggestion for this theme/length' });
+        }
+      } catch (err) {
+        console.error('Word suggestion error:', err);
+        socket.emit('error', { message: 'Failed to fetch suggestion' });
       }
     });
 
