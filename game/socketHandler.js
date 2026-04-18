@@ -3,6 +3,7 @@ const {
   isAllowedWord,
   isAllowedSecret,
   isValidRoomWordLength,
+  getRecommendedWord,
   MIN_WORD_LENGTH,
   MAX_WORD_LENGTH,
 } = require('./wordValidator')
@@ -26,7 +27,10 @@ module.exports = function setupSocketHandler(io) {
     },
 
     onPlayingForfeit: async ({ room, winnerSocketId, loserSocketId }) => {
-      await persistDisconnectResult(room, winnerSocketId, loserSocketId);
+      // Mark as finished immediately so RoomManager doesn't returnToWaiting
+      room.phase = 'finished';
+      
+      const eloChange = await persistDisconnectResult(room, winnerSocketId, loserSocketId);
 
       const winnerP = room.getPlayer(winnerSocketId);
       const loserP = room.getPlayer(loserSocketId);
@@ -41,23 +45,47 @@ module.exports = function setupSocketHandler(io) {
         yourGuesses: winnerP.guesses.length,
         opponentGuesses: loserP.guesses.length,
         duration,
-        endReason: 'forfeit'
+        endReason: 'forfeit',
+        eloChange,
+        newElo: winnerP.disconnected ? undefined : (await User.findById(winnerP.userId))?.stats.elo
       };
 
       io.to(winnerSocketId).emit('game-over', { ...payload, result: 'win' });
       
-      // If the loser is still around (e.g. they clicked 'forfeit' button), tell them too
       if (loserP && !loserP.disconnected) {
-        io.to(loserSocketId).emit('game-over', { ...payload, result: 'loss' });
+        const loserUser = await User.findById(loserP.userId);
+        io.to(loserSocketId).emit('game-over', { 
+          ...payload, 
+          result: 'loss', 
+          newElo: loserUser?.stats.elo 
+        });
       }
     },
 
     onSetupAbandon: async ({ room, remainingSocketId, abandonedByUsername }) => {
+      // Find the player who left so we can inform them too if they clicked 'leave'
+      const remainingPlayer = room.getPlayer(remainingSocketId);
+      // Room phase technically hasn't changed yet, but we'll return to waiting anyway
+      room.phase = 'waiting';
+
       io.to(remainingSocketId).emit('setup-abandoned', {
         by: abandonedByUsername,
         wordLength: room.wordLength,
         roomCode: room.id
       });
+
+      // Find the abandoned player's socket by elimination (they are being removed)
+      for (const [sid, p] of room.players) {
+        if (p.username === abandonedByUsername && !p.disconnected) {
+          io.to(sid).emit('setup-abandoned', {
+            by: abandonedByUsername,
+            wordLength: room.wordLength,
+            roomCode: room.id,
+            self: true
+          });
+          break;
+        }
+      }
     }
   });
 
@@ -682,7 +710,9 @@ async function persistDisconnectResult(room, winnerSocketId, loserSocketId) {
     await Match.create(matchDoc);
 
     console.log(`💾 Match saved (disconnect): ${winnerPlayer.username} wins in room ${room.id}`);
+    return eloChange;
   } catch (error) {
     console.error('Failed to persist disconnect result:', error);
+    return 0;
   }
 }
