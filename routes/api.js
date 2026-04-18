@@ -233,6 +233,65 @@ router.get('/users/:username/profile', async (req, res) => {
   }
 });
 
+// GET /api/users/:username/matches — paginated full match history
+router.get('/users/:username/matches', async (req, res) => {
+  try {
+    const { username } = req.params;
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const limit = Math.min(50, Math.max(1, parseInt(req.query.limit, 10) || 20));
+    const skip = (page - 1) * limit;
+
+    const user = await User.findOne({ 
+      username: new RegExp('^' + username.trim() + '$', 'i') 
+    });
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    const actualUsername = user.username;
+
+    const total = await Match.countDocuments({
+      'players.username': actualUsername,
+      'result.endReason': { $ne: 'abandoned' }
+    });
+
+    const matches = await Match.find({
+      'players.username': actualUsername,
+      'result.endReason': { $ne: 'abandoned' }
+    })
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean();
+
+    const items = matches.map(m => {
+      const me = m.players.find(p => p.username === actualUsername);
+      const opp = m.players.find(p => p.username !== actualUsername);
+      return {
+        id: m._id,
+        date: m.createdAt,
+        wordLength: m.wordLength,
+        opponent: opp?.username || 'Unknown',
+        opponentEloChange: opp?.eloChange || 0,
+        myGuesses: me?.guessCount || 0,
+        myEloChange: me?.eloChange || 0,
+        winner: m.result.winner,
+        isDraw: m.result.isDraw,
+        endReason: m.result.endReason
+      };
+    });
+
+    res.json({
+      matches: items,
+      page,
+      limit,
+      total,
+      totalPages: Math.ceil(total / limit)
+    });
+  } catch (error) {
+    console.error('Match history error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
 // PATCH /api/profile — update user profile (username)
 router.patch('/profile', authMiddleware, async (req, res) => {
   try {
