@@ -1,18 +1,18 @@
 const express = require('express');
 const router = express.Router();
 const User = require('../models/User');
-const { protect } = require('../middleware/authMiddleware');
+const { authMiddleware } = require('../middleware/auth');
 const { getOrUpdateDailyWord } = require('../utils/dailyWord');
 
 // @desc    Get daily challenge info
 // @route   GET /api/daily/info
 // @access  Private
-router.get('/info', protect, async (req, res) => {
+router.get('/info', authMiddleware, async (req, res) => {
   try {
     const daily = await getOrUpdateDailyWord();
     const today = daily.date;
     
-    const user = await User.findById(req.user._id);
+    const user = await User.findById(req.user.userId);
     const hasPlayed = user.stats.lastDailyDate === today;
     
     res.json({
@@ -29,7 +29,7 @@ router.get('/info', protect, async (req, res) => {
 // @desc    Get the daily word (for solo mode)
 // @route   GET /api/daily/word
 // @access  Private
-router.get('/word', protect, async (req, res) => {
+router.get('/word', authMiddleware, async (req, res) => {
   try {
     const daily = await getOrUpdateDailyWord();
     res.json({ word: daily.word });
@@ -41,13 +41,13 @@ router.get('/word', protect, async (req, res) => {
 // @desc    Submit solo daily result
 // @route   POST /api/daily/solo
 // @access  Private
-router.post('/solo', protect, async (req, res) => {
+router.post('/solo', authMiddleware, async (req, res) => {
   try {
     const { guesses, win } = req.body;
     const daily = await getOrUpdateDailyWord();
     const today = daily.date;
     
-    const user = await User.findById(req.user._id);
+    const user = await User.findById(req.user.userId);
     
     if (user.stats.lastDailyDate === today) {
       return res.status(400).json({ message: 'Daily challenge already completed for today' });

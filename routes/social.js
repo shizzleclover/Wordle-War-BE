@@ -1,24 +1,24 @@
 const express = require('express');
 const router = express.Router();
 const User = require('../models/User');
-const { protect } = require('../middleware/authMiddleware');
+const { authMiddleware } = require('../middleware/auth');
 
 // @desc    Follow a user
 // @route   POST /api/social/follow/:username
 // @access  Private
-router.post('/follow/:username', protect, async (req, res) => {
+router.post('/follow/:username', authMiddleware, async (req, res) => {
   try {
     const userToFollow = await User.findOne({ username: req.params.username });
     if (!userToFollow) {
       return res.status(404).json({ message: 'User not found' });
     }
 
-    if (userToFollow._id.toString() === req.user._id.toString()) {
+    if (userToFollow._id.toString() === req.user.userId.toString()) {
       return res.status(400).json({ message: 'You cannot follow yourself' });
     }
 
     // Use addToSet to avoid duplicates
-    await User.findByIdAndUpdate(req.user._id, {
+    await User.findByIdAndUpdate(req.user.userId, {
       $addToSet: { following: userToFollow._id }
     });
 
@@ -31,14 +31,14 @@ router.post('/follow/:username', protect, async (req, res) => {
 // @desc    Unfollow a user
 // @route   DELETE /api/social/follow/:username
 // @access  Private
-router.delete('/follow/:username', protect, async (req, res) => {
+router.delete('/follow/:username', authMiddleware, async (req, res) => {
   try {
     const userToUnfollow = await User.findOne({ username: req.params.username });
     if (!userToUnfollow) {
       return res.status(404).json({ message: 'User not found' });
     }
 
-    await User.findByIdAndUpdate(req.user._id, {
+    await User.findByIdAndUpdate(req.user.userId, {
       $pull: { following: userToUnfollow._id }
     });
 
@@ -51,9 +51,9 @@ router.delete('/follow/:username', protect, async (req, res) => {
 // @desc    Get followed users
 // @route   GET /api/social/following
 // @access  Private
-router.get('/following', protect, async (req, res) => {
+router.get('/following', authMiddleware, async (req, res) => {
   try {
-    const user = await User.findById(req.user._id).populate('following', 'username stats');
+    const user = await User.findById(req.user.userId).populate('following', 'username stats');
     res.json(user.following);
   } catch (err) {
     res.status(500).json({ message: err.message });
