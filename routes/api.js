@@ -37,7 +37,8 @@ router.get('/stats', authMiddleware, async (req, res) => {
       avgGuessesPerGame: avgGuesses,
       fastestWin: stats.fastestWin,
       winStreak: stats.winStreak,
-      bestStreak: stats.bestStreak
+      bestStreak: stats.bestStreak,
+      elo: stats.elo || 100
     });
   } catch (error) {
     console.error('Stats error:', error);
@@ -154,8 +155,8 @@ router.get('/history', authMiddleware, async (req, res) => {
 router.get('/leaderboard', authMiddleware, async (req, res) => {
   try {
     const players = await User.find()
-      .select('username stats.gamesPlayed stats.wins stats.losses stats.draws stats.bestStreak')
-      .sort({ 'stats.wins': -1 })
+      .select('username stats.gamesPlayed stats.wins stats.losses stats.draws stats.bestStreak stats.elo')
+      .sort({ 'stats.elo': -1 })
       .limit(50)
       .lean();
 
@@ -169,7 +170,8 @@ router.get('/leaderboard', authMiddleware, async (req, res) => {
       winRate: p.stats.gamesPlayed > 0
         ? Math.round((p.stats.wins / p.stats.gamesPlayed) * 1000) / 10
         : 0,
-      bestStreak: p.stats.bestStreak
+      bestStreak: p.stats.bestStreak,
+      elo: p.stats.elo || 100
     }));
 
     res.json({ leaderboard });
