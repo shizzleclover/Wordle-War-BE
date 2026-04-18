@@ -21,8 +21,10 @@ router.post('/register', async (req, res) => {
       return res.status(400).json({ message: 'Password must be at least 4 characters' });
     }
 
-    // Check if username exists
-    const existingUser = await User.findOne({ username: username.trim() });
+    // Check if username exists (case-insensitive)
+    const existingUser = await User.findOne({ 
+      username: new RegExp('^' + username.trim() + '$', 'i') 
+    });
     if (existingUser) {
       return res.status(409).json({ message: 'Username already taken' });
     }
@@ -54,7 +56,10 @@ router.post('/login', async (req, res) => {
       return res.status(400).json({ message: 'Username and password are required' });
     }
 
-    const user = await User.findOne({ username: username.trim() });
+    // Find user (case-insensitive)
+    const user = await User.findOne({ 
+      username: new RegExp('^' + username.trim() + '$', 'i') 
+    });
     if (!user) {
       return res.status(401).json({ message: 'Invalid username or password' });
     }
@@ -62,12 +67,6 @@ router.post('/login', async (req, res) => {
     const isMatch = await user.comparePassword(password);
     if (!isMatch) {
       return res.status(401).json({ message: 'Invalid username or password' });
-    }
-
-    // Normalize Elo from 1200 to 100
-    if (user.stats.elo === 1200) {
-      user.stats.elo = 100;
-      await user.save();
     }
 
     const token = generateToken(user);
@@ -86,12 +85,6 @@ router.post('/login', async (req, res) => {
 router.get('/me', authMiddleware, async (req, res) => {
   try {
     const user = await User.findById(req.user.userId).select('-password');
-    // Normalize Elo from 1200 to 100
-    if (user.stats.elo === 1200) {
-      user.stats.elo = 100;
-      await user.save();
-    }
-
     res.json({ user });
   } catch (error) {
     console.error('Auth me error:', error);

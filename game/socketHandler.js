@@ -361,12 +361,6 @@ module.exports = function setupSocketHandler(io) {
         const dbUser = await User.findById(socket.user.userId);
         if (!dbUser) return socket.emit('error', { message: 'User not found' });
 
-        // Normalize Elo from 1200 to 100 if necessary
-        if (dbUser.stats.elo === 1200) {
-          dbUser.stats.elo = 100;
-          await dbUser.save();
-        }
-
         const userElo = dbUser.stats.elo || 100;
 
         const options = {

@@ -18,12 +18,6 @@ router.get('/stats', authMiddleware, async (req, res) => {
       return res.status(404).json({ message: 'User not found' });
     }
 
-    // Normalize Elo from 1200 to 100
-    if (user.stats.elo === 1200) {
-      user.stats.elo = 100;
-      await user.save();
-    }
-
     const { stats } = user;
     const winRate = stats.gamesPlayed > 0
       ? Math.round((stats.wins / stats.gamesPlayed) * 1000) / 10
@@ -191,12 +185,6 @@ router.get('/users/:username/profile', async (req, res) => {
     const { username } = req.params;
     const user = await User.findOne({ username }).select('-password');
     if (!user) return res.status(404).json({ message: 'User not found' });
-
-    // Normalize Elo from 1200 to 100
-    if (user.stats.elo === 1200) {
-      user.stats.elo = 100;
-      await user.save();
-    }
 
     const matches = await Match.find({ 'players.username': username, 'result.endReason': { $ne: 'abandoned' } })
       .sort({ createdAt: -1 })
