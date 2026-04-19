@@ -130,6 +130,12 @@ class Matchmaker {
       });
       roomManager.joinRoom(room.id, p2.socketId, p2.user);
 
+      // Join sockets to the Socket.io room channel
+      const s1 = this.io.sockets.sockets.get(p1.socketId);
+      const s2 = this.io.sockets.sockets.get(p2.socketId);
+      if (s1) s1.join(room.id);
+      if (s2) s2.join(room.id);
+
       // FOR DAILY RACE: Skip setup and set words immediately
       if (p1.options.isDaily) {
         getOrUpdateDailyWord().then(daily => {
