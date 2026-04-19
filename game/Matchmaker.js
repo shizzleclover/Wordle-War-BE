@@ -67,11 +67,12 @@ class Matchmaker {
         }
 
         // Strict matches
-        if (p1.options.gameMode !== p2.options.gameMode) continue;
+        // Strict separation for Daily Challenges
         if (!!p1.options.isDaily !== !!p2.options.isDaily) continue;
         
-        // If not random mode, word length and theme must match
-        if (p1.options.gameMode !== 'random') {
+        // Flexible matches: if neither is random, settings must match strictly
+        if (p1.options.gameMode !== 'random' && p2.options.gameMode !== 'random') {
+          if (p1.options.gameMode !== p2.options.gameMode) continue;
           if (p1.options.wordLength !== p2.options.wordLength) continue;
           if (p1.options.theme !== p2.options.theme) continue;
         }
@@ -101,11 +102,25 @@ class Matchmaker {
       let wordLength = p1.options.wordLength;
       let theme = p1.options.theme;
 
-      // For random mode, system decides the length and theme
-      if (p1.options.gameMode === 'random') {
+      // Logic for choosing settings:
+      // 1. If both are random: pick system randoms
+      // 2. If one is random and the other is standard: pick the standard one's settings
+      // 3. If neither is random: they matched strictly, so use P1's (same as P2)
+      
+      if (p1.options.gameMode === 'random' && p2.options.gameMode === 'random') {
         wordLength = [4, 5, 6, 7][Math.floor(Math.random() * 4)];
         theme = this.allThemes[Math.floor(Math.random() * this.allThemes.length)];
-        console.log(`🎲 Random mode: System chose ${wordLength}L and theme: ${theme}`);
+        console.log(`🎲 Surprise Match (Both random): System chose ${wordLength}L and theme: ${theme}`);
+      } else if (p1.options.gameMode === 'random') {
+        // P1 is filler, adopt P2's specific settings
+        wordLength = p2.options.wordLength;
+        theme = p2.options.theme;
+        console.log(`🤝 Surprise Match (P1 filler): Adopting ${p2.user.username}'s settings: ${wordLength}L, ${theme}`);
+      } else if (p2.options.gameMode === 'random') {
+        // P2 is filler, adopt P1's specific settings
+        wordLength = p1.options.wordLength;
+        theme = p1.options.theme;
+        console.log(`🤝 Surprise Match (P2 filler): Adopting ${p1.user.username}'s settings: ${wordLength}L, ${theme}`);
       }
 
       const room = roomManager.createRoom(wordLength, p1.socketId, p1.user, {

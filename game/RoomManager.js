@@ -44,6 +44,33 @@ class RoomManager {
     return null;
   }
 
+  /** Forcefully remove a user from ALL rooms they might be in (cleanup ghost sessions) */
+  forceClearUserSeats(userId) {
+    const uid = String(userId);
+    let clearedCount = 0;
+    for (const [code, room] of this.rooms) {
+      for (const [socketId, player] of room.players) {
+        if (String(player.userId) === uid) {
+          room.removePlayer(socketId);
+          this.socketToRoom.delete(socketId);
+          this.clearForfeitTimer(code, player.userId);
+          
+          if (room.getPlayerCount() === 0) {
+            this.rooms.delete(code);
+          } else {
+            // If someone else remains, return room to lobby or notify them
+            const remaining = [...room.players.keys()][0];
+            if (room.phase !== 'finished') {
+              room.returnToWaiting(remaining);
+            }
+          }
+          clearedCount++;
+        }
+      }
+    }
+    return clearedCount;
+  }
+
   createRoom(wordLength, socketId, user, options = {}) {
     const existing = this.findSeatForUser(user.userId);
     if (existing) {
@@ -342,11 +369,6 @@ class RoomManager {
       this.rooms.delete(code);
       console.log(`🗑️  Room ${code} deleted (empty)`);
       return null;
-    }
-
-    const remaining = [...room.players.keys()][0];
-    if (room.phase !== 'finished') {
-      room.returnToWaiting(remaining);
     }
 
     return {

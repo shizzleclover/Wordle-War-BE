@@ -455,6 +455,9 @@ module.exports = function setupSocketHandler(io) {
         const dbUser = await User.findById(socket.user.userId);
         if (!dbUser) return socket.emit('error', { message: 'User not found' });
 
+        // Forcefully clear any existing sessions for this USER ID to prevent ghost seats
+        roomManager.forceClearUserSeats(socket.user.userId);
+
         const userElo = dbUser.stats.elo || 100;
 
         const options = {
