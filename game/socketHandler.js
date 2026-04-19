@@ -460,7 +460,8 @@ module.exports = function setupSocketHandler(io) {
         const options = {
           wordLength: parseInt(wordLength, 10) || 5,
           gameMode: gameMode || 'standard',
-          theme: theme || 'none'
+          theme: theme || 'none',
+          isDaily: !!arguments[0].isDaily
         };
 
         if (!isValidRoomWordLength(options.wordLength)) {
@@ -558,6 +559,8 @@ function buildRoomState(room, socketId) {
     roomCode: room.id,
     wordLength: room.wordLength,
     phase: room.phase,
+    gameMode: room.gameMode,
+    theme: room.theme,
     players,
     you: {
       ready: player.ready,
