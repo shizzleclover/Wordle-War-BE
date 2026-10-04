@@ -120,8 +120,9 @@ class Matchmaker {
         isBotMatch: true
       });
 
+      const mongoose = require('mongoose');
       const botSocketId = 'bot_' + room.id;
-      const botUser = { userId: 'bot_id', username: 'WordleBot' };
+      const botUser = { userId: new mongoose.Types.ObjectId().toString(), username: 'WordleBot' };
       roomManager.joinRoom(room.id, botSocketId, botUser);
 
       // Tell bot to set its word

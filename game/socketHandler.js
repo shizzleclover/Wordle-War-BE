@@ -150,6 +150,9 @@ module.exports = function setupSocketHandler(io) {
           return socket.emit('error', { message: 'You are already in a room. Leave first.' });
         }
         
+        // Forcefully clear any existing sessions for this USER ID to prevent ghost seats
+        roomManager.forceClearUserSeats(socket.user.userId);
+        
         const options = {
           gameMode: gameMode || 'standard',
           theme: theme || 'none'
@@ -180,6 +183,9 @@ module.exports = function setupSocketHandler(io) {
           return socket.emit('error', { message: 'You are already in a room. Leave first.' });
         }
 
+        // Forcefully clear any existing sessions for this USER ID to prevent ghost seats
+        roomManager.forceClearUserSeats(socket.user.userId);
+
         const room = roomManager.joinRoom(code, socket.id, socket.user);
         socket.join(room.id);
 
@@ -209,6 +215,9 @@ module.exports = function setupSocketHandler(io) {
           return socket.emit('error', { message: 'You are already in a room.' });
         }
 
+        // Forcefully clear any existing sessions for this USER ID to prevent ghost seats
+        roomManager.forceClearUserSeats(socket.user.userId);
+
         const wl = parseInt(wordLength, 10) || 5;
         const options = {
           gameMode: gameMode || 'standard',
@@ -219,8 +228,9 @@ module.exports = function setupSocketHandler(io) {
         const room = roomManager.createRoom(wl, socket.id, socket.user, options);
         socket.join(room.id);
 
+        const mongoose = require('mongoose');
         const botSocketId = 'bot_' + room.id;
-        const botUser = { userId: 'bot_id', username: 'WordleBot' };
+        const botUser = { userId: new mongoose.Types.ObjectId().toString(), username: 'WordleBot' };
         roomManager.joinRoom(room.id, botSocketId, botUser);
 
         const botEngine = require('./BotEngine');
@@ -389,7 +399,8 @@ module.exports = function setupSocketHandler(io) {
               yourTurn: true,
               opponentGuessCount: player.guesses.length,
               turnStartedAt: room.turnStartedAt,
-              actionPoints: opponent.actionPoints
+              actionPoints: opponent.actionPoints,
+              lastOpponentGuess: { word: cleanWord, feedback: result.feedback }
             });
           }
 
@@ -588,7 +599,7 @@ async function executeBotTurn(room, io) {
             opponentGuessCount: botPlayer.guesses.length,
             turnStartedAt: room.turnStartedAt,
             actionPoints: room.getPlayer(humanSocketId).actionPoints,
-            lastOpponentGuess: guessWord // Optionally send the bot's guess to frontend if needed
+            lastOpponentGuess: { word: guessWord, feedback: result.feedback }
           });
         }
         if (room.gameMode === 'blitz') startBlitzTimer(room, io);
@@ -685,7 +696,8 @@ function buildRoomState(room, socketId) {
           username: opponent.username,
           ready: opponent.ready,
           disconnected: opponent.disconnected,
-          guessCount: opponent.guesses.length
+          guessCount: opponent.guesses.length,
+          guesses: opponent.guesses
         }
       : null,
     yourTurn: room.phase === 'playing' && room.currentTurn === socketId,
