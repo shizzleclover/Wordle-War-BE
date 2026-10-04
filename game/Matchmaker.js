@@ -92,8 +92,49 @@ class Matchmaker {
           this.queue.delete(String(p2.user.userId));
 
           this.formMatch(p1, p2);
+          continue; // Move to next pair
         }
       }
+    }
+
+    // Pass 2: Check for Bot fallback
+    for (const p1 of Array.from(this.queue.values())) {
+      const now = Date.now();
+      const p1WaitTime = Math.floor((now - p1.joinedAt) / 1000);
+      if (p1WaitTime >= 15 && !p1.options.isDaily) {
+        this.queue.delete(String(p1.user.userId));
+        this.formMatchWithBot(p1);
+      }
+    }
+  }
+
+  formMatchWithBot(p1) {
+    try {
+      const wordLength = p1.options.gameMode === 'random' ? 5 : p1.options.wordLength;
+      const theme = p1.options.gameMode === 'random' ? 'none' : p1.options.theme;
+
+      const room = roomManager.createRoom(wordLength, p1.socketId, p1.user, {
+        gameMode: p1.options.gameMode,
+        theme: theme,
+        isDaily: false,
+        isBotMatch: true
+      });
+
+      const botSocketId = 'bot_' + room.id;
+      const botUser = { userId: 'bot_id', username: 'WordleBot' };
+      roomManager.joinRoom(room.id, botSocketId, botUser);
+
+      // Tell bot to set its word
+      const botEngine = require('./BotEngine');
+      room.setWord(botSocketId, botEngine.pickSecretWord(wordLength));
+
+      const s1 = this.io.sockets.sockets.get(p1.socketId);
+      if (s1) s1.join(room.id);
+
+      this.io.to(room.id).emit('match-found', { roomCode: room.id, isBot: true });
+      console.log(`🤖 Bot Match formed: ${p1.user.username} vs WordleBot in Room ${room.id}`);
+    } catch (err) {
+      console.error('Bot Match formation error:', err);
     }
   }
 

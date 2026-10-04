@@ -38,7 +38,9 @@ module.exports = function setupSocketHandler(io) {
         ? Math.round((Date.now() - room.startedAt.getTime()) / 1000)
         : 0;
 
-      const payload = {
+        const safeFind = async (id) => String(id).startsWith('bot_') ? null : await User.findById(id).catch(() => null);
+        const winnerUser = winnerP.disconnected ? null : await safeFind(winnerP.userId);
+        const payload = {
         winner: winnerP.username,
         opponentWord: loserP.secretWord?.toUpperCase(),
         yourWord: winnerP.secretWord?.toUpperCase(),
@@ -47,13 +49,13 @@ module.exports = function setupSocketHandler(io) {
         duration,
         endReason: 'forfeit',
         eloChange,
-        newElo: winnerP.disconnected ? undefined : (await User.findById(winnerP.userId))?.stats.elo
+        newElo: winnerUser?.stats.elo
       };
 
       io.to(winnerSocketId).emit('game-over', { ...payload, result: 'win' });
       
       if (loserP && !loserP.disconnected) {
-        const loserUser = await User.findById(loserP.userId);
+        const loserUser = await safeFind(loserP.userId);
         io.to(loserSocketId).emit('game-over', { 
           ...payload, 
           result: 'loss', 
@@ -199,6 +201,38 @@ module.exports = function setupSocketHandler(io) {
       }
     });
 
+    // ─── PLAY VS BOT ────────────────────────────────────
+    socket.on('play-vs-bot', ({ wordLength, gameMode, theme }) => {
+      try {
+        const existing = roomManager.getRoomBySocketId(socket.id);
+        if (existing) {
+          return socket.emit('error', { message: 'You are already in a room.' });
+        }
+
+        const wl = parseInt(wordLength, 10) || 5;
+        const options = {
+          gameMode: gameMode || 'standard',
+          theme: theme || 'none',
+          isBotMatch: true
+        };
+
+        const room = roomManager.createRoom(wl, socket.id, socket.user, options);
+        socket.join(room.id);
+
+        const botSocketId = 'bot_' + room.id;
+        const botUser = { userId: 'bot_id', username: 'WordleBot' };
+        roomManager.joinRoom(room.id, botSocketId, botUser);
+
+        const botEngine = require('./BotEngine');
+        room.setWord(botSocketId, botEngine.pickSecretWord(wl));
+
+        socket.emit('match-found', { roomCode: room.id, isBot: true });
+        console.log(`🤖 Explicit Bot Match created: ${socket.user.username} vs WordleBot in Room ${room.id}`);
+      } catch (err) {
+        socket.emit('error', { message: err.message });
+      }
+    });
+
     // ─── POWERUPS ───────────────────────────────────────
     socket.on('use-powerup', ({ type }) => {
       try {
@@ -267,17 +301,22 @@ module.exports = function setupSocketHandler(io) {
             const isFirstTurn = room.currentTurn === socketId;
             const opp = room.getOpponent(socketId);
 
-            io.to(socketId).emit('game-start', {
-              yourTurn: isFirstTurn,
-              opponentName: opp.username,
-              wordLength: room.wordLength,
-              gameMode: room.gameMode,
-              theme: room.theme,
-              turnStartedAt: room.turnStartedAt
-            });
+            if (!socketId.startsWith('bot_')) {
+              io.to(socketId).emit('game-start', {
+                yourTurn: isFirstTurn,
+                opponentName: opp.username,
+                wordLength: room.wordLength,
+                gameMode: room.gameMode,
+                theme: room.theme,
+                turnStartedAt: room.turnStartedAt
+              });
+            }
           }
           if (room.gameMode === 'blitz') {
             startBlitzTimer(room, io);
+          }
+          if (room.currentTurn.startsWith('bot_')) {
+            executeBotTurn(room, io);
           }
         }
       } catch (error) {
@@ -344,7 +383,7 @@ module.exports = function setupSocketHandler(io) {
           }
         } else {
           const opponent = room.getOpponent(socket.id);
-          if (opponent && !opponent.disconnected) {
+          if (opponent && !opponent.disconnected && !opponent.socketId.startsWith('bot_')) {
             const player = room.getPlayer(socket.id);
             io.to(opponent.socketId).emit('turn-update', {
               yourTurn: true,
@@ -360,6 +399,10 @@ module.exports = function setupSocketHandler(io) {
             turnStartedAt: room.turnStartedAt,
             actionPoints: room.getPlayer(socket.id).actionPoints
           });
+
+          if (room.currentTurn.startsWith('bot_')) {
+            executeBotTurn(room, io);
+          }
         }
       } catch (error) {
         socket.emit('error', { message: error.message });
@@ -493,6 +536,68 @@ module.exports = function setupSocketHandler(io) {
 };
 
 // ─── HELPERS ──────────────────────────────────────────
+
+async function executeBotTurn(room, io) {
+  if (room.phase !== 'playing') return;
+  const botSocketId = room.currentTurn;
+  if (!botSocketId.startsWith('bot_')) return;
+
+  const botPlayer = room.getPlayer(botSocketId);
+  if (!botPlayer) return;
+
+  const botEngine = require('./BotEngine');
+  
+  // Give the bot a fake "thinking" delay to feel realistic
+  setTimeout(async () => {
+    try {
+      if (room.phase !== 'playing') return;
+      const guessWord = botEngine.getBestGuess(room.wordLength, botPlayer.guesses);
+      
+      const result = room.makeGuess(botSocketId, guessWord);
+
+      if (room.gameMode === 'blitz') {
+        stopBlitzTimer(room);
+      }
+
+      // We only broadcast to the human player since the bot doesn't have a real socket
+      const humanSocketId = room.getOpponent(botSocketId)?.socketId;
+      
+      if (result.gameOver) {
+        const eloChange = await persistGameResult(room, result);
+        const humanPlayer = room.getPlayer(humanSocketId);
+
+        if (humanPlayer && !humanPlayer.disconnected) {
+          const payload = {
+            result: 'loss',
+            winner: 'WordleBot',
+            opponentWord: botPlayer.secretWord?.toUpperCase(),
+            yourWord: humanPlayer.secretWord?.toUpperCase(),
+            yourGuesses: humanPlayer.guesses.length,
+            opponentGuesses: botPlayer.guesses.length,
+            duration: result.duration,
+            endReason: 'solved',
+            eloChange: -eloChange,
+            newElo: room.loserElo - eloChange
+          };
+          io.to(humanSocketId).emit('game-over', payload);
+        }
+      } else {
+        if (humanSocketId) {
+          io.to(humanSocketId).emit('turn-update', {
+            yourTurn: true,
+            opponentGuessCount: botPlayer.guesses.length,
+            turnStartedAt: room.turnStartedAt,
+            actionPoints: room.getPlayer(humanSocketId).actionPoints,
+            lastOpponentGuess: guessWord // Optionally send the bot's guess to frontend if needed
+          });
+        }
+        if (room.gameMode === 'blitz') startBlitzTimer(room, io);
+      }
+    } catch (err) {
+      console.error('Bot execution error:', err);
+    }
+  }, 2000); // 2 second thinking delay
+}
 
 function stopBlitzTimer(room) {
   if (room.blitzTimer) {
@@ -638,8 +743,9 @@ async function persistGameResult(room, result) {
   try {
     const matchDoc = room.toMatchDocument(result);
     
-    const winner = await User.findById(result.winnerId);
-    const loser = await User.findById(result.loserId);
+    const safeFindUser = async (id) => String(id).startsWith('bot_') ? null : await User.findById(id).catch(() => null);
+    const winner = await safeFindUser(result.winnerId);
+    const loser = await safeFindUser(result.loserId);
 
     let eloChange = 0;
     room.winnerElo = winner?.stats.elo || 100;
@@ -710,7 +816,8 @@ async function persistDisconnectResult(room, winnerSocketId, loserSocketId) {
     const winnerPlayer = room.getPlayer(winnerSocketId);
     const loserPlayer = room.getPlayer(loserSocketId);
 
-    const winner = await User.findById(winnerPlayer.userId);
+    const safeFindUser = async (id) => String(id).startsWith('bot_') ? null : await User.findById(id).catch(() => null);
+    const winner = await safeFindUser(winnerPlayer.userId);
     if (winner) {
       winner.stats.gamesPlayed++;
       winner.stats.wins++;
@@ -721,7 +828,7 @@ async function persistDisconnectResult(room, winnerSocketId, loserSocketId) {
       }
     }
 
-    const loser = await User.findById(loserPlayer.userId);
+    const loser = await safeFindUser(loserPlayer.userId);
     let eloChange = 0;
 
     if (loser) {
