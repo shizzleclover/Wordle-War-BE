@@ -92,11 +92,8 @@ async function getRecommendedWord(theme, length) {
   }
 
   if (theme === 'none') {
-    const generic = ['apple', 'bread', 'clock', 'dance', 'eagle', 'flute', 'grape', 'house', 'ivory', 'joker',
-                     'brave', 'charm', 'dream', 'frost', 'glyph', 'heart', 'knife', 'light', 'magic', 'noble',
-                     'piano', 'quest', 'royal', 'stone', 'trick', 'ultra', 'vigor', 'world'];
-    const filtered = generic.filter(w => w.length === length);
-    return filtered.length > 0 ? filtered[Math.floor(Math.random() * filtered.length)] : null;
+    const botEngine = require('./BotEngine');
+    return botEngine.pickSecretWord(length);
   }
 
   // 2. Fetch from Datamuse
@@ -115,7 +112,9 @@ async function getRecommendedWord(theme, length) {
     console.error('[WordValidator] Suggestion fetch failed:', err);
   }
 
-  return null;
+  // 3. Guaranteed fallback if Datamuse fails or finds no words
+  const botEngine = require('./BotEngine');
+  return botEngine.pickSecretWord(length);
 }
 
 module.exports = {
@@ -123,6 +122,7 @@ module.exports = {
   isAllowedSecret,
   isValidRoomWordLength,
   getRecommendedWord,
+  isRealWord,
   localThemes,
   MIN_WORD_LENGTH,
   MAX_WORD_LENGTH,

@@ -4,6 +4,7 @@ const {
   isAllowedSecret,
   isValidRoomWordLength,
   getRecommendedWord,
+  isRealWord,
   MIN_WORD_LENGTH,
   MAX_WORD_LENGTH,
 } = require('./wordValidator')
@@ -98,20 +99,7 @@ module.exports = function setupSocketHandler(io) {
 
     void handleReconnect(socket, io);
 
-    socket.on('use-powerup', ({ type }) => {
-      try {
-        const room = roomManager.getRoomBySocketId(socket.id);
-        if (!room) return;
-        const result = room.usePowerup(socket.id, type);
-        io.to(room.id).emit('powerup-used', {
-          by: socket.user.username,
-          type,
-          payload: result.payload
-        });
-      } catch (err) {
-        socket.emit('error', err.message);
-      }
-    });
+
 
     socket.on('game:reaction', ({ emoji }) => {
       const room = roomManager.getRoomBySocketId(socket.id);
@@ -288,13 +276,20 @@ module.exports = function setupSocketHandler(io) {
 
         const cleanWord = word.trim().toLowerCase();
 
+        if (!isAllowedWord(cleanWord, room.wordLength)) {
+          return socket.emit('error', {
+            message: `Use exactly ${room.wordLength} letters (A-Z only)`,
+          });
+        }
+
         const allowed = await isAllowedSecret(cleanWord, room.wordLength, room.theme);
         if (!allowed) {
-          return socket.emit('error', {
-            message: room.theme !== 'none' 
-              ? `Word must be related to theme: ${room.theme} and use exactly ${room.wordLength} letters (A-Z only)` 
-              : `Use exactly ${room.wordLength} letters (A-Z only)`,
-          });
+          const realWord = await isRealWord(cleanWord);
+          if (!realWord) {
+            return socket.emit('error', { message: 'Not a valid dictionary word' });
+          } else {
+            return socket.emit('error', { message: `Word must be related to theme: ${room.theme}` });
+          }
         }
 
         const allReady = room.setWord(socket.id, cleanWord);
@@ -351,6 +346,13 @@ module.exports = function setupSocketHandler(io) {
         if (!isAllowedWord(cleanWord, room.wordLength)) {
           return socket.emit('error', {
             message: `Guess must be exactly ${room.wordLength} letters (A-Z only)`,
+          });
+        }
+        
+        const realWord = await isRealWord(cleanWord);
+        if (!realWord) {
+          return socket.emit('error', {
+            message: 'Not a valid dictionary word',
           });
         }
 

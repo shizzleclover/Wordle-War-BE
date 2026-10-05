@@ -66,8 +66,35 @@ class BotEngine {
       return this.pickSecretWord(length);
     }
 
-    // Pick a random word from the REMAINING possible words (this makes it unpredictable but always mathematically valid)
-    return possibleWords[Math.floor(Math.random() * possibleWords.length)];
+    // Score words based on global letter frequency
+    const freqs = { 
+      e:11.0, a:8.5, r:7.6, i:7.5, o:7.2, t:7.0, n:6.7, s:6.3, 
+      l:5.3, c:4.5, u:3.6, d:3.4, p:3.2, m:3.0, h:3.0, g:2.5, 
+      b:2.1, f:1.8, y:1.8, w:1.3, k:1.1, v:1.0, x:0.3, z:0.3, j:0.2, q:0.2 
+    };
+
+    const scoredWords = possibleWords.map(word => {
+      let score = 0;
+      const seen = new Set();
+      for (const char of word) {
+        if (!seen.has(char)) {
+          score += freqs[char] || 0;
+          seen.add(char);
+        } else {
+          // Severely reduce value of duplicate letters to encourage information gathering
+          score += (freqs[char] || 0) * 0.2; 
+        }
+      }
+      return { word, score };
+    });
+
+    // Sort descending by score
+    scoredWords.sort((a, b) => b.score - a.score);
+
+    // Pick randomly from the top 5 best possible words to keep it slightly unpredictable but very strong
+    const topN = Math.min(scoredWords.length, 5);
+    const topCandidates = scoredWords.slice(0, topN);
+    return topCandidates[Math.floor(Math.random() * topCandidates.length)].word;
   }
 
   /**
